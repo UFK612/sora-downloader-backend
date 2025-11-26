@@ -1,66 +1,45 @@
 import express from "express";
-import cors from "cors";
 import fetch from "node-fetch";
-import cheerio from "cheerio";
+import cors from "cors";
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Extract MP4 Link from Sora page
-async function extractSoraVideo(url) {
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-    }
-  });
-
-  if (!res.ok) {
-    throw new Error("Sora responded with status: " + res.status);
-  }
-
-  const html = await res.text();
-  const $ = cheerio.load(html);
-
-  // Direct <video><source src="...">
-  const videoTag = $("video source").attr("src");
-  if (videoTag) return videoTag;
-
-  // Fallback: find any .mp4 URL in HTML
-  const jsonData = html.match(/https:\/\/.*?\.mp4/g);
-  if (jsonData && jsonData.length > 0) return jsonData[0];
-
-  throw new Error("Could not find video file on Sora page");
-}
-
+// Sora direct download API
 app.post("/api/download", async (req, res) => {
   try {
     const { url } = req.body;
 
-    if (!url || !url.includes("sora")) {
-      return res.status(400).json({ error: "Invalid Sora URL" });
+    if (!url) {
+      return res.status(400).json({ error: "Missing URL" });
     }
 
-    const mp4Link = await extractSoraVideo(url);
+    // Step 1: Fetch Sora HTML page
+    const page = await fetch(url);
+    const html = await page.text();
 
-    const videoResponse = await fetch(mp4Link);
-    const buffer = Buffer.from(await videoResponse.arrayBuffer());
+    // Step 2: Extract MP4 link
+    const match = html.match(/https:\/\/.*?\.mp4/);
+
+    if (!match) {
+      return res.status(403).json({ error: "Failed to extract video URL" });
+    }
+
+    const videoUrl = match[0];
+
+    // Step 3: Stream video back to user
+    const videoStream = await fetch(videoUrl);
 
     res.setHeader("Content-Type", "video/mp4");
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=sora-video.mp4"
-    );
+    res.setHeader("Content-Disposition", "attachment; filename=sora-video.mp4");
 
-    res.send(buffer);
+    videoStream.body.pipe(res);
   } catch (err) {
-    return res
-      .status(500)
-      .json({ error: err.message || "Unknown error occurred" });
+    res.status(500).json({ error: err.message });
   }
 });
 
-app.listen(10000, () => {
-  console.log("Sora extractor backend running on port 10000");
-});
+// Port for Render
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on ${PORT}`));
