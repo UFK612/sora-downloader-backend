@@ -15,15 +15,14 @@ app.post("/api/download", async (req, res) => {
       return res.status(400).json({ error: "URL missing" });
     }
 
-    console.log("Fetching page:", url);
-
+    console.log("Fetching Sora page:", url);
     const html = await fetch(url).then(r => r.text());
 
-    // Find MP4 link
+    // Extract MP4 URL
     const match = html.match(/https:\/\/[^"]+\.mp4/g);
 
     if (!match) {
-      return res.status(403).json({ error: "MP4 link not found in Sora page" });
+      return res.status(403).json({ error: "Unable to extract video URL" });
     }
 
     const videoUrl = match[0];
@@ -32,15 +31,18 @@ app.post("/api/download", async (req, res) => {
     const video = await fetch(videoUrl);
 
     res.setHeader("Content-Type", "video/mp4");
-    res.setHeader("Content-Disposition", "attachment; filename=sora-video.mp4");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=sora-video.mp4"
+    );
 
     video.body.pipe(res);
   } catch (err) {
-    console.error("Server error:", err);
+    console.error("Server Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Render Port
+// Render port
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
